@@ -11,7 +11,7 @@ Repository: [Tony-Omondi/leashed-agent](https://github.com/Tony-Omondi/leashed-a
 
 | | |
 |---|---|
-| Team members | _TODO: names and roles_ |
+| Team members | Tony Omondi · Victor Muthoni |
 | Alumni / Finalist Collaborator | _TODO: name and contribution note_ |
 | Backup demo video (2–3 min) | _TODO: link_ |
 
