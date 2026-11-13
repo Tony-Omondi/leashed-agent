@@ -2,9 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { connect, loadDeployment, readState, resetChain, timeTravel, eth, short, ethers } from "./chain.js";
 import { act, think, strangerPays, ownerAct, runLlm, llmStatus } from "./agent.js";
 
-// "gemini-3.5-flash" → "Gemini 3.5 Flash"
-const prettyModel = (m) =>
-  m ? m.split("-").map((w) => (/^\d/.test(w) ? w : w[0].toUpperCase() + w.slice(1))).join(" ") : "LLM";
+// The server already sends a display name, e.g. "Gemini 3.5 Flash" or "Groq GPT-OSS 120B".
+const prettyModel = (m) => m || "LLM";
 import { Icon, Stamp, Label, Card, Pill, Button } from "./ui.jsx";
 import { Verdict, verdictOf, planText } from "./Verdict.jsx";
 

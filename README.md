@@ -11,7 +11,7 @@ Repository: [Tony-Omondi/leashed-agent](https://github.com/Tony-Omondi/leashed-a
 
 | | |
 |---|---|
-| Team members | **Tony Omondi**: contracts and tests · **Victor Muthoni**: dashboard and demo |
+| Team members | **Tony Omondi**: contracts and tests · **Victor Muthoni**: dashboard and demo · **Issac Muthoka** |
 | Alumni / Finalist Collaborator | None |
 | Backup demo video (2–3 min) | _TODO: link_ |
 
@@ -57,9 +57,9 @@ restrictions are met. _We are confirming this with the Technical Lead._
    - it is recent and has not been used before.
 
    `npm run check:data-api` exercises seven forged or replayed proofs (§6).
-4. **Real LLM brain with fallback:** Google Gemini through its OpenAI-compatible API,
-   falling back from `LLM_MODEL` to `LLM_FALLBACK_MODEL` to the fake brain on a rate
-   limit or outage. The key lives only in a git-ignored `.env`.
+4. **Real LLM brains with fallback** (`agent/llm.js`): Gemini 3.5 Flash → Gemini 3.1
+   Flash Lite → Groq GPT-OSS 120B → local Ollama → the fake brain, so a rate limit or
+   outage never stalls the agent. Keys live only in a git-ignored `.env`.
 5. **Realistic injection attack:** a "supplier changed its wallet address" message (a
    common real-world fraud) in place of a crude "ignore your instructions" prompt,
    which a real model often refuses outright.
@@ -220,22 +220,29 @@ npm run owner -- agent NEW_AGENT_ADDRESS
 
 ### Model configuration
 
-| Brain | How |
-|---|---|
-| Fake (deterministic, no key) | `LLM_FAKE=1`, or the dashboard's **Fake LLM** switch. It obeys any instruction on purpose; it is a stand-in, not a safe assistant. |
-| Gemini (free tier) | Create `.env` (git-ignored) as shown below. |
-| Ollama (local) | `ollama pull qwen2.5:3b`, then run with no `.env` and no `LLM_FAKE`. |
+Model names and endpoints are fixed in `agent/llm.js`. The agent tries each brain in
+order and uses the first that answers:
+
+| Order | Brain | Needs |
+|---|---|---|
+| 1 | Gemini 3.5 Flash | `LLM_API_KEY` (free Google AI Studio key) |
+| 2 | Gemini 3.1 Flash Lite | the same key (separate free-tier quota) |
+| 3 | Groq GPT-OSS 120B | `GROQ_API_KEY` (free Groq key) |
+| 4 | Ollama Qwen 2.5 3B | `ollama pull qwen2.5:3b`, running locally; no key |
+| 5 | Fake LLM | nothing. Deterministic, obeys any instruction on purpose; a stand-in, not a safe assistant. `LLM_FAKE=1` or the dashboard's switch picks it directly. |
+
+The only configuration is the API keys, in a git-ignored `.env` in the project root.
+**Never commit keys:**
 
 ```bash
-LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
-LLM_MODEL=gemini-3.5-flash
-LLM_FALLBACK_MODEL=gemini-3.1-flash-lite
-LLM_API_KEY=your_key_here
+LLM_API_KEY=your_gemini_key
+GROQ_API_KEY=your_groq_key
 ```
 
-The dashboard calls the model through a server-side proxy in `web/vite.config.js`, so
-the key never reaches the browser. Each verdict card names the model that actually
-answered.
+The dashboard calls the models through a server-side proxy, so keys never reach the
+browser. Each verdict card names the brain that actually answered. In testing, both
+Gemini and Groq's GPT-OSS 120B fell for the address-swap scam and called `pay()` to the
+attacker; the contract reverted it.
 
 ### Hosted demo (PrimeCloud, Docker)
 
@@ -249,8 +256,9 @@ network or real funds. One container runs everything:
 
 Only the web server is reachable, and it protects the rest:
 
-- **A password on the whole site** (HTTP Basic; `DEMO_USER`, default `judge`, and
-  `DEMO_PASSWORD`). Only `/healthz` is open.
+- **A password on the whole site** (HTTP Basic; username `judge`). Only a salted
+  scrypt *hash* of the password is in the code, so the repo does not reveal it; the
+  team shares the password with judges directly. Only `/healthz` is open.
 - **A filtered chain proxy.** Only the read calls and **already-signed** transactions
   the dashboard needs are allowed. `eth_sendTransaction` (spending from the node's
   unlocked accounts) and every `hardhat_*` admin call are refused, including inside
@@ -260,13 +268,14 @@ Only the web server is reachable, and it protects the rest:
 
 ```bash
 docker build -t leashed-agent .
-docker run -p 8080:8080 -e DEMO_PASSWORD=choose-a-password --env-file .env leashed-agent
+docker run -p 8080:8080 --env-file .env leashed-agent   # --env-file only to use real AI
 ```
 
 **PrimeCloud:** connect this GitHub repo with root folder `/`. The root `Dockerfile` is
-detected, and `primecloud.yaml` sets port 8080, health check `/healthz` and the model
-settings. In the Console, set the secrets `DEMO_PASSWORD` and `LLM_API_KEY` (a key made
-only for this deployment). Without a key, the dashboard uses the Fake LLM.
+detected, and `primecloud.yaml` sets port 8080 and health check `/healthz`. Nothing else
+needs configuring. To give the hosted agent a real AI brain, optionally add
+`LLM_API_KEY` and/or `GROQ_API_KEY` as secrets in the Console; without them the hosted
+dashboard uses the Fake LLM.
 
 The track rules say practice servers should not be exposed to the internet. This hosted
 copy keeps the chain private and the site password-protected. Confirm with the Technical
@@ -345,8 +354,9 @@ dashboard is a convenience; enforcement is entirely on-chain.
   the environment, write and extend tests, build the data API proof check, the
   Gemini integration and the React dashboard, and write this documentation. All output
   was run and checked by the team.
-- **Google Gemini** (`gemini-3.5-flash`, falling back to `gemini-3.1-flash-lite`) is the
-  runtime brain of the agent. It is used through the free tier.
+- **Google Gemini** (`gemini-3.5-flash`, falling back to `gemini-3.1-flash-lite`) and
+  **Groq** (`openai/gpt-oss-120b`) are the agent's runtime brains, used through their
+  free tiers.
 - **Icons8** (Material Rounded pack, locked in `web/icons8.json`) supplies the dashboard
   icons.
 - **Starter code:** zetech-forge/web3_starter-kit (see §1).

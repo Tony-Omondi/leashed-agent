@@ -1,15 +1,14 @@
 // The leashed AI agent. It plans with an LLM and acts through the PolicyWallet.
-// Three brains via env: LLM_FAKE=1 (rule-based, no key) | Ollama | hosted key.
+// Brains (agent/llm.js): Gemini 3.5 Flash → Gemini 3.1 Flash Lite → Groq → local
+// Ollama → the deterministic fake brain. LLM_FAKE=1 skips straight to the fake one.
 // KEY POINT: the agent NEVER holds the owner's key, and the CONTRACT enforces
 // the policy — so even a tricked agent can't move funds outside the rules.
 const { loadDeployment, provider, contractFor, reasonOf, ethers } = require("./shared");
-require("dotenv").config({ quiet: true }); // LLM_* settings from .env (git-ignored)
+require("dotenv").config({ quiet: true }); // API keys from .env (git-ignored)
+const llm = require("./llm");
 
 const FAKE = process.env.LLM_FAKE === "1";
-const LLM_BASE_URL = process.env.LLM_BASE_URL || "http://localhost:11434/v1";
-const LLM_MODEL = process.env.LLM_MODEL || "qwen2.5:3b";
-const LLM_API_KEY = process.env.LLM_API_KEY || "";
-const DATA_API = process.env.DATA_API_URL || "http://localhost:4021";
+const DATA_API = "http://localhost:4021";
 const MAX_STEPS = 6;
 
 const d = loadDeployment();
@@ -101,33 +100,25 @@ function fakeLlm(messages) {
   return toolCall("buy_data", { dataset: "weather", query: "Kiambu" });
 }
 
-// Try the main model, then the fallback model (separate free-tier quota), then the
-// fake brain — so a rate limit (HTTP 429) on demo day never stalls the agent.
-const MODELS = [LLM_MODEL, process.env.LLM_FALLBACK_MODEL].filter(Boolean);
+// Real brains in order (agent/llm.js), then the fake brain, so a rate limit or
+// outage on demo day never stalls the agent.
 async function callLlm(messages) {
   if (FAKE) return fakeLlm(messages);
-  for (const model of MODELS) {
-    try {
-      const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-        method: "POST",
-        headers: { "content-type": "application/json", ...(LLM_API_KEY ? { authorization: `Bearer ${LLM_API_KEY}` } : {}) },
-        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: "auto" }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).replace(/\s+/g, " ").slice(0, 160)}`);
-      const m = (await res.json()).choices[0].message;
-      return { role: m.role, content: m.content ?? null, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}) };
-    } catch (err) {
-      console.log(`(${model} unavailable: ${err.message}; trying next brain)`);
-    }
+  try {
+    const { label, message: m } = await llm.chat({ messages, tools: TOOLS }, process.env, console.log);
+    console.log(`(brain: ${label})`);
+    return { role: m.role, content: m.content ?? null, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}) };
+  } catch {
+    console.log("(falling back to the fake LLM)");
+    return fakeLlm(messages);
   }
-  console.log("(falling back to the fake LLM)");
-  return fakeLlm(messages);
 }
 
 async function main() {
   const request = process.argv.slice(2).join(" ").trim();
   if (!request) return console.log('Usage: npm run agent -- "What will the weather be in Kiambu this week?"');
-  console.log(`Agent ${agentSigner.address} using ${FAKE ? "the fake LLM" : `${LLM_MODEL} @ ${LLM_BASE_URL}`}`);
+  const order = FAKE ? "the fake LLM" : [...llm.brains().map((b) => b.label), "fake LLM"].join(" → ");
+  console.log(`Agent ${agentSigner.address} using ${order}`);
 
   const messages = [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: request }];
   for (let step = 0; step < MAX_STEPS; step++) {

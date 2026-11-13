@@ -1,6 +1,6 @@
 // Production server for a hosted demo (e.g. PrimeCloud). One public port serves:
 //   GET  /healthz          no password: is the chain up and the wallet deployed?
-//   *    everything else   HTTP Basic auth (DEMO_USER / DEMO_PASSWORD)
+//   *    everything else   HTTP Basic auth (username "judge" + the team's demo password)
 //   GET  /                 the built dashboard (web/dist)
 //   POST /rpc              FILTERED proxy to the private Hardhat node on 127.0.0.1
 //   GET  /data/*           proxy to the mock data API on 127.0.0.1:4021
@@ -15,12 +15,13 @@ import { fileURLToPath } from "node:url";
 import { CHAIN_RPC, DEPLOYMENT, sendJson, readBody, chainCall, deploymentHandler, makeLlmHandler, resetHandler } from "./api.js";
 
 const PORT = Number(process.env.PORT || 8080);
-const USER = process.env.DEMO_USER || "judge";
-const PASS = process.env.DEMO_PASSWORD || "";
-if (PASS.length < 8) {
-  console.error("DEMO_PASSWORD must be set (8+ characters). Refusing to serve a public demo without a password.");
-  process.exit(1);
-}
+
+// Login for the hosted demo. Only a salted scrypt HASH of the password is in the
+// repo, never the password itself, so reading this file doesn't reveal it.
+const USER = "judge";
+const PASSWORD_SALT = "af8bb3a2b410f6b156cb197fa25664ea";
+const PASSWORD_HASH = Buffer.from("bbb2b06bca45f7d80d73d445f4d37423582ace1d868657532852df572e5536c7", "hex");
+const SCRYPT = { N: 16384, r: 8, p: 1 };
 
 const DIST = fileURLToPath(new URL("./dist/", import.meta.url));
 const llm = makeLlmHandler(process.env);
@@ -35,16 +36,23 @@ const ALLOWED_RPC = new Set([
   "evm_increaseTime", "evm_mine", // "Skip 1 hour" (local practice chain only)
 ]);
 
-// Constant-time password check.
+// Password check: scrypt (slow on purpose) + constant-time compare. A header that
+// already passed is remembered, so page assets don't each pay the scrypt cost.
 const digest = (s) => crypto.createHash("sha256").update(String(s)).digest();
+const accepted = new Set();
 function authorized(req) {
-  const [type, b64] = (req.headers.authorization || "").split(" ");
+  const header = req.headers.authorization || "";
+  const seen = digest(header).toString("hex");
+  if (accepted.has(seen)) return true;
+  const [type, b64] = header.split(" ");
   if (type !== "Basic" || !b64) return false;
   const decoded = Buffer.from(b64, "base64").toString("utf8");
   const i = decoded.indexOf(":");
-  if (i < 0) return false;
+  if (i < 0 || decoded.length > 256) return false;
   const userOk = crypto.timingSafeEqual(digest(decoded.slice(0, i)), digest(USER));
-  const passOk = crypto.timingSafeEqual(digest(decoded.slice(i + 1)), digest(PASS));
+  const hash = crypto.scryptSync(decoded.slice(i + 1), PASSWORD_SALT, 32, SCRYPT);
+  const passOk = crypto.timingSafeEqual(hash, PASSWORD_HASH);
+  if (userOk && passOk) accepted.add(seen);
   return userOk && passOk;
 }
 
@@ -130,4 +138,5 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => console.log(`Leashed Agent demo on :${PORT} (user "${USER}", password from DEMO_PASSWORD)`));
+const brain = process.env.LLM_API_KEY || process.env.GROQ_API_KEY ? "LLM key found" : "no LLM key: Fake LLM only";
+server.listen(PORT, "0.0.0.0", () => console.log(`Leashed Agent demo on :${PORT} (login user "${USER}"; ${brain})`));

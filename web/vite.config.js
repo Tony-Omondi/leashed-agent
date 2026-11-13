@@ -4,9 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 import { ROOT, deploymentHandler, makeLlmHandler, resetHandler } from "./api.js";
 
 // Dev server: the same server-side routes as production (web/server.js), minus
-// the password, since it only listens on localhost. LLM_* settings come from ../.env.
+// the password, since it only listens on localhost. API keys come from ../.env.
 function leashedApi() {
-  const env = loadEnv("", ROOT, "LLM_");
+  const env = loadEnv("", ROOT, ["LLM_", "GROQ_"]);
   return {
     name: "leashed-api",
     configureServer(server) {

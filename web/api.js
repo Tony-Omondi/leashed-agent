@@ -5,8 +5,10 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createRequire } from "node:module";
 
 const execFileP = promisify(execFile);
+const llm = createRequire(import.meta.url)("../agent/llm.js");
 
 export const ROOT = fileURLToPath(new URL("..", import.meta.url));
 export const DEPLOYMENT = fileURLToPath(new URL("../deployments/agent.json", import.meta.url));
@@ -44,35 +46,22 @@ export function deploymentHandler(_req, res) {
   sendJson(res, 200, fs.readFileSync(DEPLOYMENT, "utf8"));
 }
 
-// LLM proxy: tries the main model, then the fallback model. The page falls back
-// to the fake brain if both fail (rate limit, outage, no key).
+// LLM proxy: the same brain order as the CLI (agent/llm.js). The page falls back
+// to the fake brain if every real brain fails (rate limit, outage, no key).
 export function makeLlmHandler(env) {
-  const models = [env.LLM_MODEL, env.LLM_FALLBACK_MODEL].filter(Boolean);
-  const configured = Boolean(env.LLM_BASE_URL && env.LLM_API_KEY && models.length);
+  const first = llm.configured(env);
   return async (req, res) => {
-    if (req.method === "GET") return sendJson(res, 200, { configured, model: models[0] || null });
+    if (req.method === "GET") return sendJson(res, 200, { configured: Boolean(first), model: first?.label ?? null });
     if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
-    if (!configured) return sendJson(res, 503, { error: "No LLM configured" });
+    if (!first) return sendJson(res, 503, { error: "No LLM key configured" });
     let body;
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) { return sendJson(res, 400, { error: e.message }); }
-    const { messages, tools } = body;
-    const errors = [];
-    for (const model of models) {
-      try {
-        const r = await fetch(`${env.LLM_BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: { "content-type": "application/json", authorization: `Bearer ${env.LLM_API_KEY}` },
-          body: JSON.stringify({ model, messages, tools, tool_choice: "auto" }),
-          signal: AbortSignal.timeout(25000),
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const message = (await r.json()).choices[0].message;
-        return sendJson(res, 200, { model, message });
-      } catch (e) {
-        errors.push(`${model}: ${e.message}`);
-      }
+    try {
+      const { label, message } = await llm.chat({ messages: body.messages, tools: body.tools }, env);
+      sendJson(res, 200, { model: label, message });
+    } catch (e) {
+      sendJson(res, 502, { error: e.message });
     }
-    sendJson(res, 502, { error: errors.join("; ") });
   };
 }
 
