@@ -273,9 +273,14 @@ docker run -p 8080:8080 --env-file .env leashed-agent   # --env-file only to use
 
 **PrimeCloud:** connect this GitHub repo with root folder `/`. The root `Dockerfile` is
 detected, and `primecloud.yaml` sets port 8080 and health check `/healthz`. Nothing else
-needs configuring. To give the hosted agent a real AI brain, optionally add
-`LLM_API_KEY` and/or `GROQ_API_KEY` as secrets in the Console; without them the hosted
-dashboard uses the Fake LLM.
+needs configuring.
+
+**Real AI on the hosted demo, with no keys readable in the repo:** `web/llm-keys.enc.json`
+holds the Gemini and Groq keys **encrypted** (AES-256-GCM, with a key derived by scrypt
+from the demo password). The password itself is not in the repo, only a separate salted
+hash of it. On the first successful login the server unlocks the keys into memory. Keys
+set as host secrets (`LLM_API_KEY`, `GROQ_API_KEY`) take priority. If the keys are
+revoked, the agent falls back to the Fake LLM.
 
 The track rules say practice servers should not be exposed to the internet. This hosted
 copy keeps the chain private and the site password-protected. Confirm with the Technical

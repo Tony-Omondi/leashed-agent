@@ -49,8 +49,8 @@ export function deploymentHandler(_req, res) {
 // LLM proxy: the same brain order as the CLI (agent/llm.js). The page falls back
 // to the fake brain if every real brain fails (rate limit, outage, no key).
 export function makeLlmHandler(env) {
-  const first = llm.configured(env);
   return async (req, res) => {
+    const first = llm.configured(env); // read per request: keys may be unlocked after start
     if (req.method === "GET") return sendJson(res, 200, { configured: Boolean(first), model: first?.label ?? null });
     if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
     if (!first) return sendJson(res, 503, { error: "No LLM key configured" });

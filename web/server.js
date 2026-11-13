@@ -24,7 +24,31 @@ const PASSWORD_HASH = Buffer.from("bbb2b06bca45f7d80d73d445f4d37423582ace1d86865
 const SCRYPT = { N: 16384, r: 8, p: 1 };
 
 const DIST = fileURLToPath(new URL("./dist/", import.meta.url));
-const llm = makeLlmHandler(process.env);
+
+// AI keys: web/llm-keys.enc.json holds them AES-256-GCM-encrypted with a key derived
+// from the demo password, so the repo never contains them in readable form. The
+// first successful login unlocks them into memory only. Keys set on the host
+// (LLM_API_KEY / GROQ_API_KEY) take priority, if any.
+const llmEnv = { ...process.env };
+const llm = makeLlmHandler(llmEnv);
+const ENC_FILE = fileURLToPath(new URL("./llm-keys.enc.json", import.meta.url));
+let keysUnlocked = Boolean(llmEnv.LLM_API_KEY || llmEnv.GROQ_API_KEY);
+function unlockKeys(password) {
+  if (keysUnlocked || !fs.existsSync(ENC_FILE)) return;
+  try {
+    const box = JSON.parse(fs.readFileSync(ENC_FILE, "utf8"));
+    const { N, r, p } = box.kdf;
+    const key = crypto.scryptSync(password, Buffer.from(box.salt, "base64"), 32, { N, r, p, maxmem: 64 * 1024 * 1024 });
+    const d = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(box.iv, "base64"));
+    d.setAuthTag(Buffer.from(box.tag, "base64"));
+    const keys = JSON.parse(Buffer.concat([d.update(Buffer.from(box.data, "base64")), d.final()]).toString("utf8"));
+    Object.assign(llmEnv, keys);
+    keysUnlocked = true;
+    console.log("AI keys unlocked: real Gemini/Groq brains available");
+  } catch (e) {
+    console.error("Could not unlock AI keys:", e.message);
+  }
+}
 
 // JSON-RPC methods the dashboard needs. Transactions must arrive already signed
 // (eth_sendRawTransaction), so nobody can spend from the node's unlocked accounts.
@@ -52,7 +76,10 @@ function authorized(req) {
   const userOk = crypto.timingSafeEqual(digest(decoded.slice(0, i)), digest(USER));
   const hash = crypto.scryptSync(decoded.slice(i + 1), PASSWORD_SALT, 32, SCRYPT);
   const passOk = crypto.timingSafeEqual(hash, PASSWORD_HASH);
-  if (userOk && passOk) accepted.add(seen);
+  if (userOk && passOk) {
+    accepted.add(seen);
+    unlockKeys(decoded.slice(i + 1));
+  }
   return userOk && passOk;
 }
 
@@ -138,5 +165,5 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-const brain = process.env.LLM_API_KEY || process.env.GROQ_API_KEY ? "LLM key found" : "no LLM key: Fake LLM only";
+const brain = keysUnlocked ? "AI keys from host settings" : "AI keys unlock at first login";
 server.listen(PORT, "0.0.0.0", () => console.log(`Leashed Agent demo on :${PORT} (login user "${USER}"; ${brain})`));

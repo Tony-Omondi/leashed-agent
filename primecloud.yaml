@@ -1,8 +1,7 @@
 # PrimeCloud blueprint (https://primecloud.cloud/docs/configuration, section 05).
 # Build and start come from the root Dockerfile, so no runtime/build/start commands here.
-# Nothing needs configuring: the login and model settings are in the code.
-# Optional: add LLM_API_KEY (Gemini) and/or GROQ_API_KEY as secrets in the Console
-# to give the hosted agent a real AI brain; without them it uses the Fake LLM.
+# Nothing needs configuring: the login and model settings are in the code, and the
+# AI keys ship encrypted (web/llm-keys.enc.json), unlocked by the demo password at login.
 version: 1
 name: leashed-agent
 type: web

@@ -1,0 +1,13 @@
+{
+  "note": "AI keys for the hosted demo, AES-256-GCM encrypted with a key derived (scrypt) from the demo password. Unreadable without the password; the server unlocks them in memory at login.",
+  "kdf": {
+    "name": "scrypt",
+    "N": 32768,
+    "r": 8,
+    "p": 1
+  },
+  "salt": "Eqny+pzcSCuxlv/X2NDcYg==",
+  "iv": "Wg+EN3KWcFrfZ0it",
+  "tag": "CuIhy7Cw7jO1ONdwJBRFtw==",
+  "data": "FCJOyf+YZ1QCP61CIm5NR1bmH/CVmpIPsx+CW6fbFprKTOTxuUNT0lCDXKkkos0lyOWecUei5I3Y2lTW0M/vv5AD6rfgcw4WNNBDXWzBlJYR/aW2DL+IVD1H7O4f0NoOkO4sp+92m9mWgwVqcyXjJsaD1GK7ydNvozLKDIOh6Ksj1IXVjtRbGRduuXZKztGkcQ=="
+}
