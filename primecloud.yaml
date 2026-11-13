@@ -1,0 +1,21 @@
+# PrimeCloud blueprint (https://primecloud.cloud/docs/configuration, section 05).
+# Build and start come from the root Dockerfile, so no runtime/build/start commands here.
+version: 1
+name: leashed-agent
+type: web
+port: 8080
+healthCheckPath: /healthz
+autoDeploy: true
+branch: main
+envVars:
+  DEMO_USER: judge
+  LLM_BASE_URL: https://generativelanguage.googleapis.com/v1beta/openai
+  LLM_MODEL: gemini-3.5-flash
+  LLM_FALLBACK_MODEL: gemini-3.1-flash-lite
+# Values are set in the PrimeCloud Console, never in this repo.
+#   DEMO_PASSWORD: password for the whole demo site (8+ characters)
+#   LLM_API_KEY:   a Gemini key made only for this deployment (optional; without it
+#                  the dashboard runs on the Fake LLM brain)
+secrets:
+  - DEMO_PASSWORD
+  - LLM_API_KEY

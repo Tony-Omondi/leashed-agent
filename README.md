@@ -237,6 +237,41 @@ The dashboard calls the model through a server-side proxy in `web/vite.config.js
 the key never reaches the browser. Each verdict card names the model that actually
 answered.
 
+### Hosted demo (PrimeCloud, Docker)
+
+The local practice chain still runs **inside** the container; nothing touches a public
+network or real funds. One container runs everything:
+
+1. The Hardhat chain, on 127.0.0.1 only.
+2. The deploy.
+3. The data API, on 127.0.0.1 only.
+4. A production web server (`web/server.js`) on `$PORT`.
+
+Only the web server is reachable, and it protects the rest:
+
+- **A password on the whole site** (HTTP Basic; `DEMO_USER`, default `judge`, and
+  `DEMO_PASSWORD`). Only `/healthz` is open.
+- **A filtered chain proxy.** Only the read calls and **already-signed** transactions
+  the dashboard needs are allowed. `eth_sendTransaction` (spending from the node's
+  unlocked accounts) and every `hardhat_*` admin call are refused, including inside
+  batches.
+- **Server-side secrets.** The Gemini key never reaches the browser, and model calls
+  and resets are rate-limited.
+
+```bash
+docker build -t leashed-agent .
+docker run -p 8080:8080 -e DEMO_PASSWORD=choose-a-password --env-file .env leashed-agent
+```
+
+**PrimeCloud:** connect this GitHub repo with root folder `/`. The root `Dockerfile` is
+detected, and `primecloud.yaml` sets port 8080, health check `/healthz` and the model
+settings. In the Console, set the secrets `DEMO_PASSWORD` and `LLM_API_KEY` (a key made
+only for this deployment). Without a key, the dashboard uses the Fake LLM.
+
+The track rules say practice servers should not be exposed to the internet. This hosted
+copy keeps the chain private and the site password-protected. Confirm with the Technical
+Lead that hosting is acceptable.
+
 ---
 
 ## 6. Acceptance matrix → evidence

@@ -83,4 +83,4 @@ function handle(table, fallback) {
 app.get("/weather", handle(WEATHER, "No forecast for that place (mock data)."));
 app.get("/market-prices", handle(PRICES, "No price for that crop (mock data)."));
 
-app.listen(4021, () => console.log("Mock data API on http://localhost:4021 (seller:", loadDeployment().seller + ")"));
+app.listen(4021, "127.0.0.1", () => console.log("Mock data API on http://localhost:4021 (seller:", loadDeployment().seller + ")"));

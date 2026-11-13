@@ -1,0 +1,12 @@
+.git
+.env
+.env.*
+.claude
+.interface-design
+node_modules
+web/node_modules
+web/dist
+artifacts
+cache
+deployments
+*.log
