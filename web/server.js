@@ -136,10 +136,12 @@ const server = http.createServer(async (req, res) => {
   res.setHeader("referrer-policy", "no-referrer");
   const url = req.url || "/";
   try {
-    if (url === "/healthz") {
+    // Health probes (no password). The web server starts before the chain, so a
+    // platform probe passes within seconds; "ready" says whether the chain is up yet.
+    if (url === "/health" || url === "/healthz" || url.startsWith("/health?") || url.startsWith("/healthz?")) {
       const block = await chainCall("eth_blockNumber").catch(() => null);
-      const ok = Boolean(block) && fs.existsSync(DEPLOYMENT);
-      return sendJson(res, ok ? 200 : 503, { status: ok ? "ok" : "starting", block: block ? parseInt(block, 16) : null });
+      const ready = Boolean(block) && fs.existsSync(DEPLOYMENT);
+      return sendJson(res, 200, { status: "ok", ready, block: block ? parseInt(block, 16) : null });
     }
     if (!authorized(req)) {
       res.statusCode = 401;
