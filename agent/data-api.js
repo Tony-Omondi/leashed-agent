@@ -26,8 +26,10 @@ function handle(table, fallback) {
         accepts: { payTo: d.seller, amountWei: PRICE_WEI, memo: `data:${req.path}` },
       });
     }
+    // Lenient match: a real LLM may ask for "Kiambu, Kenya" or "maize prices".
     const q = String(req.query.q || "").toLowerCase();
-    res.json({ paidWith: paid, data: table[q] || fallback });
+    const key = Object.keys(table).find((k) => q.includes(k));
+    res.json({ paidWith: paid, data: key ? table[key] : fallback });
   };
 }
 

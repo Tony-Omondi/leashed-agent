@@ -17,6 +17,7 @@ const STAMP = {
   DONE: "text-leaf",
   REVERTED: "text-murram",
   ERROR: "text-ink-3",
+  "NO TX": "text-ink-3",
 };
 
 export function Stamp({ verdict, small = false, big = false }) {

@@ -3,6 +3,7 @@ import { eth, short } from "./chain.js";
 
 export function verdictOf(entry) {
   const r = entry.result;
+  if (r.kind === "reply") return "NO TX";
   if (r.error || (r.ok === false && r.failedAt === -1)) return "ERROR";
   if (!r.ok) return "REVERTED";
   if (r.kind === "request") return "REQUESTED";
@@ -31,6 +32,12 @@ function Outcome({ entry, names }) {
   const r = entry.result;
   const v = verdictOf(entry);
   const delta = `Wallet ${eth(entry.before)} → ${eth(entry.after)} ETH`;
+  if (v === "NO TX")
+    return (
+      <p className="text-ink-2">
+        <span className="font-semibold text-ink">The model made no wallet call.</span> {delta}
+      </p>
+    );
   if (v === "ERROR") return <p className="text-ink-2">{r.error || r.reason}</p>;
   if (v === "REVERTED")
     return (
@@ -133,6 +140,7 @@ export function Verdict({ entry, names, busy }) {
           <div>
             <div className="text-[14px] font-semibold">{actor.name}</div>
             <div className="text-[12px] text-ink-3">
+              {entry.brain && <span className="font-medium text-ink-2">{entry.brain} · </span>}
               {entry.at} · block <span className="num">{entry.block}</span>
             </div>
           </div>
@@ -167,6 +175,12 @@ export function Verdict({ entry, names, busy }) {
           <div>
             <Label className="mb-1.5">What the contract checked</Label>
             <Rules entry={entry} />
+          </div>
+        )}
+        {entry.reply && (
+          <div>
+            <Label>What the agent told Wanjiru</Label>
+            <p className="mt-1.5 rounded-[8px] border border-rule px-3.5 py-2.5 text-[14px] text-ink-2">{entry.reply}</p>
           </div>
         )}
       </div>

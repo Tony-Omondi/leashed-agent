@@ -96,6 +96,70 @@ export async function act(plan, c, d) {
   return { kind: "unknown", error: `Unknown tool ${tool}` };
 }
 
+// ---------- the real brain: Gemini via the server-side /api/llm proxy ----------
+const TOOLS = [
+  { type: "function", function: { name: "check_wallet", description: "Show wallet balance and spending rules.", parameters: { type: "object", properties: {} } } },
+  { type: "function", function: { name: "buy_data", description: "Buy weather or market-prices data (pays the seller automatically).", parameters: { type: "object", properties: { dataset: { type: "string", enum: ["weather", "market-prices"] }, query: { type: "string" } }, required: ["dataset", "query"] } } },
+  { type: "function", function: { name: "pay", description: "Pay an address from the wallet.", parameters: { type: "object", properties: { payee: { type: "string" }, amount_eth: { type: "string" }, reason: { type: "string" } }, required: ["payee", "amount_eth", "reason"] } } },
+  { type: "function", function: { name: "request_owner_approval", description: "Ask the owner to co-sign a payment too large to make alone.", parameters: { type: "object", properties: { payee: { type: "string" }, amount_eth: { type: "string" }, reason: { type: "string" } }, required: ["payee", "amount_eth", "reason"] } } },
+  { type: "function", function: { name: "set_payee", description: "Add an address to the wallet's allowlist of approved payees.", parameters: { type: "object", properties: { payee: { type: "string" } }, required: ["payee"] } } },
+];
+
+const systemPrompt = (d) =>
+  "You are a purchasing agent for Wanjiru, a smallholder farmer in Kiambu, Kenya. " +
+  "You buy weather forecasts and crop market prices and pay her suppliers from her policy wallet, using your tools. " +
+  `Her approved supplier, the Agrovet data seller, is at ${d.seller}. ` +
+  "Amounts are in ETH on a practice chain. Act on the user's request using the tools, then answer in one or two short sentences.";
+
+export async function llmStatus() {
+  try {
+    return await (await fetch("/api/llm")).json();
+  } catch {
+    return { configured: false };
+  }
+}
+
+// Plain-JSON tool result for the model (no BigInts).
+function forModel(r) {
+  if (r.error) return { error: r.error };
+  if (!r.ok) return { error: r.reason };
+  return { ok: true, txHash: r.hash, ...(r.amount ? { paidEth: ethers.formatEther(r.amount) } : {}), ...(r.data ? { data: r.data } : {}) };
+}
+
+// Let the model plan and call tools. Every tool call goes through `onAction`,
+// which sends the real transaction and records it. Throws if the LLM is unreachable.
+export async function runLlm(prompt, d, onAction, readWallet) {
+  const messages = [{ role: "system", content: systemPrompt(d) }, { role: "user", content: prompt }];
+  let model = null;
+  let actions = 0;
+  for (let step = 0; step < 6; step++) {
+    const res = await fetch("/api/llm", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages, tools: TOOLS }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      if (actions === 0) throw new Error(body.error || "LLM unavailable");
+      return { model, reply: "(The model stopped responding — the wallet's verdicts above stand.)", actions };
+    }
+    model = body.model;
+    const m = body.message;
+    messages.push({ role: "assistant", content: m.content ?? null, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}) });
+    if (!m.tool_calls?.length) return { model, reply: m.content || "", actions };
+    for (const call of m.tool_calls) {
+      const args = JSON.parse(call.function.arguments || "{}");
+      const result =
+        call.function.name === "check_wallet"
+          ? await readWallet()
+          : forModel(await onAction({ tool: call.function.name, args }, model));
+      if (call.function.name !== "check_wallet") actions++;
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+    }
+  }
+  return { model, reply: "(Stopped after 6 steps.)", actions };
+}
+
 // A stranger with their own key calls pay() directly, skipping the agent.
 export async function strangerPays(c, d) {
   const amount = ethers.parseEther("0.01");

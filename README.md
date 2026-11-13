@@ -103,7 +103,30 @@ deliberately naive "fake LLM" brain: every button sends a **real transaction** t
   co-sign pending requests, skip 1 hour (window reset).
 - **Reset demo** rewinds the chain to the snapshot taken at deploy (`evm_revert`),
   so every judge sees a fresh 1.000 ETH wallet.
-- You can also type any instruction into the box — the agent obeys anything.
+- You can also type any instruction into the box.
+- **Brain switch:** *Fake LLM* (deterministic, obeys anything — the guaranteed demo)
+  or a **real Gemini model** that plans and calls the wallet tools itself. The
+  dashboard calls Gemini through a server-side proxy in `web/vite.config.js`, so the
+  API key stays in `.env` and never reaches the browser. If the main model is rate
+  limited or overloaded it tries `LLM_FALLBACK_MODEL`, then the fake brain, and
+  each verdict card shows which model actually acted.
+- The prompt-injection button uses a realistic **"supplier changed its wallet
+  address"** scam. In testing, Gemini fell for it, tried `pay()` and then
+  `requestPayment()` to the attacker, and the contract reverted both.
+
+### Real LLM setup (Gemini, free tier)
+
+Create a key at Google AI Studio, then create `.env` in the project root
+(git-ignored — never commit it):
+
+```bash
+LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+LLM_MODEL=gemini-3.5-flash
+LLM_FALLBACK_MODEL=gemini-3.1-flash-lite
+LLM_API_KEY=your_key_here
+```
+
+The CLI agent (`npm run agent -- "…"` without `LLM_FAKE=1`) reads the same file.
 
 Icons: [Icons8](https://icons8.com) Material Rounded (pack locked in `web/icons8.json`).
 

@@ -3,6 +3,7 @@
 // KEY POINT: the agent NEVER holds the owner's key, and the CONTRACT enforces
 // the policy — so even a tricked agent can't move funds outside the rules.
 const { loadDeployment, provider, contractFor, reasonOf, ethers } = require("./shared");
+require("dotenv").config({ quiet: true }); // LLM_* settings from .env (git-ignored)
 
 const FAKE = process.env.LLM_FAKE === "1";
 const LLM_BASE_URL = process.env.LLM_BASE_URL || "http://localhost:11434/v1";
@@ -98,16 +99,27 @@ function fakeLlm(messages) {
   return toolCall("buy_data", { dataset: "weather", query: "Kiambu" });
 }
 
+// Try the main model, then the fallback model (separate free-tier quota), then the
+// fake brain — so a rate limit (HTTP 429) on demo day never stalls the agent.
+const MODELS = [LLM_MODEL, process.env.LLM_FALLBACK_MODEL].filter(Boolean);
 async function callLlm(messages) {
   if (FAKE) return fakeLlm(messages);
-  const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: { "content-type": "application/json", ...(LLM_API_KEY ? { authorization: `Bearer ${LLM_API_KEY}` } : {}) },
-    body: JSON.stringify({ model: LLM_MODEL, messages, tools: TOOLS, tool_choice: "auto" }),
-  });
-  if (!res.ok) throw new Error(`LLM request failed (${res.status}): ${await res.text()}`);
-  const m = (await res.json()).choices[0].message;
-  return { role: m.role, content: m.content ?? null, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}) };
+  for (const model of MODELS) {
+    try {
+      const res = await fetch(`${LLM_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(LLM_API_KEY ? { authorization: `Bearer ${LLM_API_KEY}` } : {}) },
+        body: JSON.stringify({ model, messages, tools: TOOLS, tool_choice: "auto" }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} ${(await res.text()).replace(/\s+/g, " ").slice(0, 160)}`);
+      const m = (await res.json()).choices[0].message;
+      return { role: m.role, content: m.content ?? null, ...(m.tool_calls?.length ? { tool_calls: m.tool_calls } : {}) };
+    } catch (err) {
+      console.log(`(${model} unavailable: ${err.message}; trying next brain)`);
+    }
+  }
+  console.log("(falling back to the fake LLM)");
+  return fakeLlm(messages);
 }
 
 async function main() {
