@@ -13,7 +13,10 @@
     "owner": "node agent/owner.js",
     "web": "npm --prefix web run dev",
     "web:install": "npm --prefix web install",
-    "demo": "concurrently -k -n chain,api,web -c green,yellow,cyan \"npm run chain\" \"wait-on tcp:127.0.0.1:8545 && npm run deploy && npm run data-api\" \"wait-on tcp:127.0.0.1:8545 && npm run web\""
+    "demo": "concurrently -k -n chain,api,web -c green,yellow,cyan \"npm run chain\" \"wait-on tcp:127.0.0.1:8545 && npm run deploy && npm run data-api\" \"wait-on tcp:127.0.0.1:8545 && npm run web\"",
+    "deploy:agent": "npm run deploy",
+    "test:wallet": "hardhat test test/PolicyWallet.test.js",
+    "check:data-api": "node scripts/check-data-api.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

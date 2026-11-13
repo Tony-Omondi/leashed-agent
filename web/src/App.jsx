@@ -203,9 +203,11 @@ export default function App() {
   const reset = () =>
     guarded(async () => {
       try {
-        await resetChain(c, d);
-        setEntries([]); setSelected(null);
-        await refresh();
+        const dep = await resetChain();
+        const conn = connect(dep);
+        const st = await readState(conn, dep);
+        setD(dep); setC(conn); setS(st); stateRef.current = st;
+        setEntries([]); setSelected(null); setNotice(null); setOffline(null);
       } catch (e) {
         setOffline(e.message);
       }

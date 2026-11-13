@@ -96,16 +96,14 @@ export async function timeTravel(c, seconds) {
   await c.provider.send("evm_mine", []);
 }
 
-// Rewind the chain to the snapshot taken right after deploy, then re-snapshot
-// (Hardhat consumes a snapshot when you revert to it).
-const snapKey = (d) => `leash-snap:${d.wallet}:${d.snapshotId}`;
-export async function resetChain(c, d) {
-  let id = d.snapshotId;
-  try { id = localStorage.getItem(snapKey(d)) || id; } catch {}
-  const ok = await c.provider.send("evm_revert", [id]);
-  if (!ok) throw new Error("Snapshot already used. Run `npm run deploy` again.");
-  const next = await c.provider.send("evm_snapshot", []);
-  try { localStorage.setItem(snapKey(d), next); } catch {}
+// Wipe the local chain and redeploy (server-side, see vite.config.js). Returns the
+// new deployment. More reliable than evm_snapshot/evm_revert, whose snapshot IDs
+// Hardhat can invalidate internally.
+export async function resetChain() {
+  const res = await fetch("/api/reset", { method: "POST" });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.error || "Reset failed");
+  return body;
 }
 
 export const short = (a) => (a ? `${a.slice(0, 6)}…${a.slice(-4)}` : "");

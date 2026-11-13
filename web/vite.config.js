@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const execFileP = promisify(execFile);
 
 // deployments/agent.json is (re)written by `npm run deploy`. Serve it fresh on
 // every request so the dashboard always talks to the latest deployment.
@@ -66,8 +70,37 @@ function llmEndpoint() {
   };
 }
 
+// "Reset demo": wipe the local practice chain (hardhat_reset) and re-run the real
+// deploy script, so every judge starts from a freshly deployed, funded wallet.
+// Local Hardhat chain only; never point this at any other network.
+function resetEndpoint() {
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  return {
+    name: "leashed-reset",
+    configureServer(server) {
+      server.middlewares.use("/api/reset", async (req, res) => {
+        res.setHeader("content-type", "application/json");
+        if (req.method !== "POST") { res.statusCode = 405; return res.end("{}"); }
+        try {
+          const r = await fetch("http://127.0.0.1:8545", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "hardhat_reset", params: [] }),
+          });
+          if (!(await r.json()).result) throw new Error("hardhat_reset failed");
+          await execFileP("npm", ["run", "deploy", "--silent"], { cwd: root, timeout: 60000 });
+          res.end(fs.readFileSync(DEPLOYMENT, "utf8"));
+        } catch (e) {
+          res.statusCode = 500;
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), deploymentEndpoint(), llmEndpoint()],
+  plugins: [react(), tailwindcss(), deploymentEndpoint(), llmEndpoint(), resetEndpoint()],
   server: {
     proxy: {
       // Same-origin proxies: no CORS changes needed on the chain or data API.

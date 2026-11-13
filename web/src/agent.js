@@ -89,8 +89,11 @@ export async function act(plan, c, d) {
     const r = await submit(RULES.pay, () => c.agent.pay(accepts.payTo, amount, accepts.memo));
     const out = { kind: "buy", rules: RULES.pay, payee: accepts.payTo, amount, price402: amount, ...r };
     if (!r.ok) return out;
-    const second = await fetch(url, { headers: { "x-payment": r.hash } });
-    return { ...out, data: (await second.json()).data };
+    // Prove we sent this payment: the agent key signs the tx hash (x402-style proof).
+    const signature = await c.agent.runner.signMessage(r.hash);
+    const second = await fetch(url, { headers: { "x-payment": r.hash, "x-payment-signature": signature } });
+    const body = await second.json();
+    return second.ok ? { ...out, data: body.data } : { ...out, data: `Seller refused the proof: ${body.error}` };
   }
 
   return { kind: "unknown", error: `Unknown tool ${tool}` };

@@ -123,4 +123,152 @@ describe("PolicyWallet", function () {
     await wallet.connect(owner).approve(id);
     await expect(wallet.connect(owner).approve(id)).to.be.revertedWith("Already paid");
   });
+
+  // ---------- Official Challenge C acceptance matrix: boundaries & remaining cases ----------
+  describe("acceptance matrix", () => {
+    const ONE_WEI = 1n;
+    const p = (eth) => ethers.parseEther(eth);
+
+    async function setup() {
+      const base = await deploy();
+      const signers = await ethers.getSigners();
+      return { ...base, stranger: signers[4], newAgent: signers[5] };
+    }
+    async function requestLarge(wallet, agent, payee, amount = "0.3", reason = "bulk fertiliser") {
+      await (await wallet.connect(agent).requestPayment(payee, p(amount), reason)).wait();
+      return (await wallet.requestCount()) - 1n;
+    }
+
+    it("threshold: exactly 0.02 ETH is autonomous and records the reason", async () => {
+      const { wallet, agent, seller } = await setup();
+      const tx = wallet.connect(agent).pay(seller.address, CO_SIGN_ABOVE, "maize prices");
+      await expect(tx).to.emit(wallet, "Paid").withArgs(seller.address, CO_SIGN_ABOVE, "maize prices", false);
+      await expect(tx).to.changeEtherBalances([seller, wallet], [CO_SIGN_ABOVE, -CO_SIGN_ABOVE]);
+    });
+
+    it("threshold: one wei above 0.02 ETH needs approval even with the full budget left", async () => {
+      const { wallet, agent, seller } = await setup();
+      expect(await wallet.spentInWindow()).to.equal(0n);
+      await expect(wallet.connect(agent).pay(seller.address, CO_SIGN_ABOVE + ONE_WEI, "x"))
+        .to.be.revertedWith("The owner must co-sign this payment");
+    });
+
+    it("budget: exactly the remaining 0.05 ETH is allowed, one more wei is rejected", async () => {
+      const { wallet, agent, seller } = await setup();
+      await wallet.connect(agent).pay(seller.address, p("0.02"), "a");
+      await wallet.connect(agent).pay(seller.address, p("0.02"), "b");
+      await wallet.connect(agent).pay(seller.address, p("0.01"), "c"); // exactly the remaining budget
+      expect(await wallet.spentInWindow()).to.equal(WINDOW_LIMIT);
+      await expect(wallet.connect(agent).pay(seller.address, ONE_WEI, "d"))
+        .to.be.revertedWith("The spending window limit would be exceeded");
+      expect(await wallet.spentInWindow()).to.equal(WINDOW_LIMIT); // rejected spend not recorded
+    });
+
+    it("window: measured from windowStart; 3599s is the same window, 3600s starts a new one", async () => {
+      const { wallet, agent, seller } = await setup();
+      for (const r of ["a", "b"]) await wallet.connect(agent).pay(seller.address, p("0.02"), r);
+      await wallet.connect(agent).pay(seller.address, p("0.01"), "c");
+      const start = await wallet.windowStart();
+
+      await ethers.provider.send("evm_setNextBlockTimestamp", [Number(start + WINDOW_SECONDS - 1n)]);
+      await expect(wallet.connect(agent).pay(seller.address, ONE_WEI, "too early"))
+        .to.be.revertedWith("The spending window limit would be exceeded");
+
+      await ethers.provider.send("evm_setNextBlockTimestamp", [Number(start + WINDOW_SECONDS)]);
+      await wallet.connect(agent).pay(seller.address, p("0.02"), "first action of the new window");
+      expect(await wallet.windowStart()).to.equal(start + WINDOW_SECONDS);
+      expect(await wallet.spentInWindow()).to.equal(p("0.02"));
+    });
+
+    it("failed transfer rolls back an expired-window reset (no partial state)", async () => {
+      const { wallet, owner, agent, seller } = await setup();
+      const Rejector = await ethers.getContractFactory("RejectEther");
+      const rejector = await Rejector.deploy();
+      await wallet.connect(owner).setPayee(rejector.target, true);
+      await wallet.connect(agent).pay(seller.address, p("0.02"), "spent");
+      const start = await wallet.windowStart();
+      await ethers.provider.send("evm_increaseTime", [Number(WINDOW_SECONDS)]);
+      await ethers.provider.send("evm_mine", []);
+      await expect(wallet.connect(agent).pay(rejector.target, p("0.01"), "x")).to.be.revertedWith("Transfer failed");
+      expect(await wallet.windowStart()).to.equal(start);
+      expect(await wallet.spentInWindow()).to.equal(p("0.02"));
+    });
+
+    it("unauthorized recipient: a new payment request to it is rejected too", async () => {
+      const { wallet, agent, attacker } = await setup();
+      await expect(wallet.connect(agent).requestPayment(attacker.address, p("0.3"), "scam"))
+        .to.be.revertedWith("That payee is not on the allowlist");
+      expect(await wallet.requestCount()).to.equal(0n);
+    });
+
+    it("request alone moves no funds; only the owner can approve", async () => {
+      const { wallet, agent, seller, stranger } = await setup();
+      const before = await ethers.provider.getBalance(wallet.target);
+      const id = await requestLarge(wallet, agent, seller.address);
+      expect(await ethers.provider.getBalance(wallet.target)).to.equal(before);
+      const r = await wallet.requests(id);
+      expect(r.done).to.equal(false);
+      await expect(wallet.connect(agent).approve(id)).to.be.revertedWith("Only the owner can do this");
+      await expect(wallet.connect(stranger).approve(id)).to.be.revertedWith("Only the owner can do this");
+      await expect(wallet.connect(seller).approve(id)).to.be.revertedWith("Only the owner can do this");
+    });
+
+    it("blocking a payee before approval prevents settlement", async () => {
+      const { wallet, owner, agent, seller } = await setup();
+      const id = await requestLarge(wallet, agent, seller.address);
+      await wallet.connect(owner).setPayee(seller.address, false);
+      await expect(wallet.connect(owner).approve(id)).to.be.revertedWith("That payee is not on the allowlist");
+      expect((await wallet.requests(id)).done).to.equal(false);
+    });
+
+    it("pause blocks payments, requests and approvals; unpause lets the owner approve", async () => {
+      const { wallet, owner, agent, seller } = await setup();
+      const id = await requestLarge(wallet, agent, seller.address);
+      await wallet.connect(owner).setPaused(true);
+      await expect(wallet.connect(agent).pay(seller.address, p("0.01"), "x")).to.be.revertedWith("The owner has paused the agent");
+      await expect(wallet.connect(agent).requestPayment(seller.address, p("0.3"), "x")).to.be.revertedWith("The owner has paused the agent");
+      await expect(wallet.connect(owner).approve(id)).to.be.revertedWith("The owner has paused the agent");
+      await wallet.connect(owner).setPaused(false);
+      await expect(wallet.connect(owner).approve(id))
+        .to.emit(wallet, "Paid").withArgs(seller.address, p("0.3"), "bulk fertiliser", true);
+    });
+
+    it("revoked agent cannot pay or request; unpause does not restore it", async () => {
+      const { wallet, owner, agent, seller } = await setup();
+      await wallet.connect(owner).setAgent(ethers.ZeroAddress);
+      await wallet.connect(owner).setPaused(true);
+      await wallet.connect(owner).setPaused(false);
+      await expect(wallet.connect(agent).pay(seller.address, p("0.01"), "x")).to.be.revertedWith("Only the agent can do this");
+      await expect(wallet.connect(agent).requestPayment(seller.address, p("0.3"), "x")).to.be.revertedWith("Only the agent can do this");
+    });
+
+    it("agent rotation: the old agent loses access, the new agent can pay", async () => {
+      const { wallet, owner, agent, seller, newAgent } = await setup();
+      await wallet.connect(owner).setAgent(newAgent.address);
+      await expect(wallet.connect(agent).pay(seller.address, p("0.01"), "old")).to.be.revertedWith("Only the agent can do this");
+      await expect(wallet.connect(newAgent).pay(seller.address, p("0.01"), "new")).to.emit(wallet, "Paid");
+    });
+
+    it("agent, stranger and approved recipient cannot change any policy", async () => {
+      const { wallet, agent, seller, stranger } = await setup();
+      for (const who of [agent, stranger, seller]) {
+        await expect(wallet.connect(who).setPayee(who.address, true)).to.be.revertedWith("Only the owner can do this");
+        await expect(wallet.connect(who).setPaused(true)).to.be.revertedWith("Only the owner can do this");
+        await expect(wallet.connect(who).setAgent(who.address)).to.be.revertedWith("Only the owner can do this");
+      }
+    });
+
+    it("a stranger or the recipient cannot request a payment", async () => {
+      const { wallet, seller, stranger } = await setup();
+      await expect(wallet.connect(stranger).requestPayment(seller.address, p("0.3"), "x")).to.be.revertedWith("Only the agent can do this");
+      await expect(wallet.connect(seller).requestPayment(seller.address, p("0.3"), "x")).to.be.revertedWith("Only the agent can do this");
+    });
+
+    it("approval needs enough wallet balance; a failed transfer leaves the request pending", async () => {
+      const { wallet, owner, agent, seller } = await setup();
+      const id = await requestLarge(wallet, agent, seller.address, "5"); // wallet only holds 1 ETH
+      await expect(wallet.connect(owner).approve(id)).to.be.revertedWith("Transfer failed");
+      expect((await wallet.requests(id)).done).to.equal(false);
+    });
+  });
 });

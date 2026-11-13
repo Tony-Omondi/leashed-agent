@@ -31,7 +31,8 @@ function loadDeployment() {
 }
 
 function provider(d) {
-  return new ethers.JsonRpcProvider(d.rpc);
+  // cacheTimeout -1: never reuse a cached nonce for back-to-back transactions.
+  return new ethers.JsonRpcProvider(d.rpc, undefined, { cacheTimeout: -1 });
 }
 
 function contractFor(signerOrProvider, d) {

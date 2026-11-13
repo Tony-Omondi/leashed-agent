@@ -60,7 +60,9 @@ async function buyData({ dataset, query }) {
   const { accepts } = await first.json();
   const tx = await wallet.pay(accepts.payTo, BigInt(accepts.amountWei), accepts.memo);
   const rcpt = await tx.wait();
-  const second = await fetch(url, { headers: { "x-payment": rcpt.hash } });
+  // Prove we sent this payment: sign its tx hash with the agent key (not the owner's).
+  const signature = await agentSigner.signMessage(rcpt.hash);
+  const second = await fetch(url, { headers: { "x-payment": rcpt.hash, "x-payment-signature": signature } });
   return second.json();
 }
 

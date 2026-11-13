@@ -2,7 +2,10 @@
 pragma solidity ^0.8.24;
 
 /**
- * PolicyWallet — a "leashed agent" wallet (SDG 2: Zero Hunger).
+ * PolicyWallet — from the official zetech-forge/web3_starter-kit. Logic unchanged;
+ * Team Shamba Shield added these comments only.
+ *
+ * A "leashed agent" wallet (SDG 2: Zero Hunger).
  *
  * An OWNER funds this wallet and appoints an AGENT (an AI purchasing agent
  * acting for a smallholder farmer). The agent can spend autonomously, but the
@@ -12,7 +15,9 @@ pragma solidity ^0.8.24;
  *   1. Only the agent may spend (owner can revoke by setting agent = 0).
  *   2. The payee must be on the owner's allowlist.
  *   3. A single autonomous payment must be <= coSignAbove.
- *   4. Total autonomous spend per rolling window must be <= windowLimit.
+ *   4. Total autonomous spend per window must be <= windowLimit. The window is
+ *      fixed (not sliding): it starts at deployment and resets on the next
+ *      successful payment once windowSeconds have passed since windowStart.
  *   5. Anything larger needs an explicit owner approve() (co-sign), which is
  *      OUTSIDE the autonomous budget.
  *   6. Owner can pause() everything at any time.
