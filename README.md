@@ -79,6 +79,34 @@ Expected: **11 passing** — 6 policy tests and 5 adversarial attack tests:
 Every attack test asserts the **exact** revert reason, and balance tests assert exact
 wei deltas, so a test can only pass if the intended rule fired.
 
+## Demo dashboard (React + Tailwind) — the easiest way to present
+
+```bash
+npm install
+npm run web:install     # once: installs the dashboard (web/)
+npm run demo            # chain + deploy + data API + dashboard, one terminal
+```
+
+Open **http://localhost:5173**. Nothing is mocked except the data seller and the
+deliberately naive "fake LLM" brain: every button sends a **real transaction** to
+`PolicyWallet.sol` on the local chain, and the verdict comes from the contract.
+
+- **Errands** (honest): Kiambu weather and maize prices (HTTP 402 → agent pays
+  0.001 ETH → data), bulk fertiliser (0.3 ETH → `requestPayment` → owner approves).
+- **Attacks** — one button per adversarial test: prompt injection, oversized
+  payment, drain in small bites, agent edits the allowlist, stranger calls `pay()`.
+- Each attempt shows the instruction, what the agent tried, and the contract's
+  `require` checks **in order**: which passed, which reverted (with the exact
+  revert string), which were never reached — stamped **PAID / REVERTED / REQUESTED**.
+- The sidebar shows the live wallet balance, the hourly-budget meter, the allowlist
+  (`mapping(address ⇒ bool)`), and owner controls: pause, revoke agent,
+  co-sign pending requests, skip 1 hour (window reset).
+- **Reset demo** rewinds the chain to the snapshot taken at deploy (`evm_revert`),
+  so every judge sees a fresh 1.000 ETH wallet.
+- You can also type any instruction into the box — the agent obeys anything.
+
+Icons: [Icons8](https://icons8.com) Material Rounded (pack locked in `web/icons8.json`).
+
 ## Run the live demo (4 terminals, all in this folder)
 
 ```bash
@@ -140,12 +168,16 @@ deliberately naive. 0.01 ETH is under both the per-payment cap and the window bu
 so the **allowlist alone** stopped it. Wallet balance, `spentInWindow` and the
 attacker's balance are all unchanged.
 
-### Judge demo script (≈2 minutes)
+### Judge demo script (≈2 minutes, dashboard)
 
 1. `npm test` → 11 passing, point at the 5 `ATTACK:` lines.
-2. Terminals 1–3 running → weather request → agent pays 0.001 ETH and gets data.
-3. Attack prompt → `That payee is not on the allowlist` → nothing moved.
-4. Punchline: *swap in any model, jailbreak it — the EVM still checks every rule.*
+2. Dashboard → **Kiambu weather** → five green checks, PAID, forecast arrives.
+3. **Prompt injection** → the agent obeys, the contract stops it at
+   `isAllowedPayee` → REVERTED, wallet unchanged.
+4. **Drain in small bites** → two payments pass, the third hits the hourly budget.
+5. **Bulk fertiliser** → REQUESTED → **Approve** as owner → paid, budget untouched.
+6. Punchline: *swap in any model, jailbreak it — the EVM still checks every rule.*
+7. **Reset demo** before the next judge.
 
 ## Why the contract matters more than the model
 

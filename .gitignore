@@ -4,3 +4,4 @@ cache/
 deployments/
 .env
 *.log
+web/dist/

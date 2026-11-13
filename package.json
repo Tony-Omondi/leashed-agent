@@ -10,11 +10,16 @@
     "deploy": "hardhat run scripts/deploy.js --network localhost",
     "data-api": "node agent/data-api.js",
     "agent": "node agent/agent.js",
-    "owner": "node agent/owner.js"
+    "owner": "node agent/owner.js",
+    "web": "npm --prefix web run dev",
+    "web:install": "npm --prefix web install",
+    "demo": "concurrently -k -n chain,api,web -c green,yellow,cyan \"npm run chain\" \"wait-on tcp:127.0.0.1:8545 && npm run deploy && npm run data-api\" \"wait-on tcp:127.0.0.1:8545 && npm run web\""
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.22.0"
+    "concurrently": "^10.0.7",
+    "hardhat": "^2.22.0",
+    "wait-on": "^9.5.1"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* Tokens come from the shamba: cream ledger paper, tea-leaf green, red murram
+   soil, ripe maize. Green = the leash held / paid. Murram = reverted.
+   Maize = budget and waiting on the owner. */
+@theme {
+  --color-paper: #f4efe3;       /* page: ledger paper */
+  --color-sheet: #fbf8f0;       /* raised card */
+  --color-well: #ebe4d3;        /* inset: inputs, meter track */
+  --color-ink: #1e2a1f;         /* primary text */
+  --color-ink-2: #4b5547;       /* supporting */
+  --color-ink-3: #7a8073;       /* metadata */
+  --color-ink-4: #aaad9f;       /* disabled / not reached */
+  --color-rule: rgb(30 42 31 / 0.11);
+  --color-rule-strong: rgb(30 42 31 / 0.2);
+  --color-leaf: #2e6a3a;
+  --color-leaf-wash: #e2ebdb;
+  --color-murram: #a63f27;
+  --color-murram-wash: #f4e0d6;
+  --color-maize: #b9850f;
+  --color-maize-wash: #f5e9c8;
+
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --ease-out-snap: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+}
+h1, h2, h3 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
+.num { font-variant-numeric: tabular-nums; }
+
+@layer components {
+/* Icons8 PNGs used as masks so they take currentColor. */
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  background-color: currentColor;
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+}
+
+/* The verdict stamp: pressed onto the receipt. */
+.stamp {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transform: rotate(-4deg);
+  animation: stamp-in 200ms var(--ease-out-snap);
+}
+@keyframes stamp-in {
+  from { opacity: 0; transform: rotate(-4deg) scale(1.18); }
+  to   { opacity: 1; transform: rotate(-4deg) scale(1); }
+}
+
+.check-row {
+  animation: row-in 220ms var(--ease-out-snap) both;
+}
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.press { transition: transform 120ms var(--ease-out-snap), background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.press:active:not(:disabled) { transform: scale(0.97); }
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stamp, .check-row { animation: none; }
+  .press:active:not(:disabled) { transform: none; }
+}

@@ -1,0 +1,32 @@
+{
+  "version": 2,
+  "icons": {
+    "pack": "m_rounded",
+    "sizes": [16, 20, 24, 28],
+    "color": "currentColor",
+    "items": {
+      "wallet": { "id": "85191", "commonName": "wallet" },
+      "shield": { "id": "85804", "commonName": "security-checked" },
+      "rain": { "id": "102047", "commonName": "rain" },
+      "wheat": { "id": "pgWRELfoPV1I", "commonName": "wheat" },
+      "price-tag": { "id": "85168", "commonName": "price-tag" },
+      "field": { "id": "103290", "commonName": "field" },
+      "bot": { "id": "102919", "commonName": "bot" },
+      "shop": { "id": "85183", "commonName": "shop" },
+      "hacker": { "id": "u03W6zrx19xu", "commonName": "hacker" },
+      "pause": { "id": "85963", "commonName": "pause" },
+      "check": { "id": "83145", "commonName": "checkmark" },
+      "cancel": { "id": "83143", "commonName": "cancel" },
+      "signature": { "id": "92253", "commonName": "signature" },
+      "hourglass": { "id": "116505", "commonName": "hourglass" },
+      "restart": { "id": "83203", "commonName": "restart" },
+      "lock": { "id": "83187", "commonName": "lock" },
+      "unlock": { "id": "83227", "commonName": "unlock" },
+      "transfer": { "id": "89852", "commonName": "money-transfer" },
+      "user": { "id": "83190", "commonName": "user" },
+      "error": { "id": "83164", "commonName": "error" },
+      "test": { "id": "120918", "commonName": "test" },
+      "allowlist": { "id": "86455", "commonName": "todo-list" }
+    }
+  }
+}
